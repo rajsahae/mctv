@@ -1,0 +1,20 @@
+Next steps:
+  - Change s3 bucket folder structure to match roku json structure (movies, series, specials, short videos)
+  - Change generation script to use new structure
+  - Come up with list of tags that each video needs (especially for episodes of Millbrae City Council meetings)
+  - Parse filename for episode dates
+  - Create some more categories (MCC, Planning Commision, Kids?, Sports, etc.)
+  - Playlists?
+
+
+Must-have tags:
+  - duration (in seconds)
+  - shortDescription
+  - thumbnail url
+
+Nice-to-have tags:
+  - longDescription
+  - credits
+  - tripPlayFiles
+  - captions
+  - quality (currently hardcoded to FHD)
