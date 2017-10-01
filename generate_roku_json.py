@@ -10,6 +10,7 @@ import datetime
 import hashlib
 import json
 import re
+import urllib
 import boto3
 
 CDN_URI = "http://d3mgvwaiuadt8i.cloudfront.net"
@@ -18,10 +19,29 @@ THUMBNAIL = "https://upload.wikimedia.org/" + \
         "wikipedia/commons/thumb/f/f8/" + \
         "Aspect-ratio-16x9.svg/2000px-Aspect-ratio-16x9.svg.png"
 
-def add_episode_to_season(full_dict, year, episode):
+TYPE_PAT = r'^(?P<type>\w+)'
+NAME_PAT = r'(?P<name>[\w\s]+)'
+SEASON_PAT = r'(?P<season>\d+)'
+FILENAME_PAT = r'(?P<filename>[^\.]+)\.(?P<ext>\w+)$'
+
+def get_thumbnail(item):
+    # hardcoded for now
+    return THUMBNAIL
+
+def get_last_modified_date(item):
+    return item.last_modified.isoformat()[:10]
+
+def get_last_modified_datetime(item):
+    return item.last_modified.isoformat()
+
+def get_duration(item):
+    # hardcoded for now
+    return 10800
+
+def add_episode_to_season(feed, year, episode):
     '''Add episode to the specified dict'''
     season = next(
-        season for season in full_dict["series"][0]["seasons"] if season["seasonNumber"] == int(year)
+        season for season in feed["series"][0]["seasons"] if season["seasonNumber"] == int(year)
     )
     if not season['episodes']:
         episode['episodeNumber'] = 1
@@ -29,95 +49,135 @@ def add_episode_to_season(full_dict, year, episode):
         episode['episodeNumber'] = season['episodes'][-1]['episodeNumber'] + 1
     season['episodes'].append(episode)
 
-def new_episode(season, basename, vidtype):
+def create_episode(ctype, title, season, basename, vidtype, datetimeAdded, duration, thumbnail, shortDesc, longDesc, dateAdded):
     '''Create and return a new series episode'''
     filename = basename + '.' + vidtype
     return {
         "id": digest(filename),
         "title": basename,
         "content": {
-            "dateAdded": datetime.datetime.isoformat(datetime.datetime.now()),
+            "dateAdded": datetimeAdded,
             "videos": [
                 {
-                    "url": '/'.join([CDN_URI, season, filename]),
+                    "url": CDN_URI + "/" + urllib.quote('/'.join([ctype, title, season, filename])),
                     "quality": "FHD",
                     "videoType": vidtype.upper()
                 }
             ],
-            "duration": 10800
+            "duration": duration
         },
-        "thumbnail": THUMBNAIL,
+        "thumbnail": thumbnail,
         "episodeNumber": 1,
-        "shortDescription": basename,
-        "releaseDate": datetime.datetime.isoformat(datetime.datetime.now())
+        "shortDescription": shortDesc,
+        "longDescription": longDesc,
+        "releaseDate": dateAdded
     }
 
-def new_season(year):
+def create_season(year):
     '''Return a dict for a new season'''
     return {"seasonNumber": int(year), "episodes": []}
 
-def has_season(full_dict, year):
+def has_content_type(feed, ctype, title):
+    '''Return True if dict contains content type with specified name'''
+    return any(map(lambda x: x['title'] == title, feed[ctype]))
+
+def has_season(feed, year):
     '''Return True if dict contains season for specified year'''
-    return any(map(lambda x: x['seasonNumber'] == int(year), full_dict['series'][0]['seasons']))
+    return any(map(lambda x: x['seasonNumber'] == int(year), feed['series'][0]['seasons']))
+
+def insert_new_content(feed, ctype, title):
+    if ctype == "series":
+        content = new_series(title)
+    feed[ctype].append(content)
 
 def digest(string):
     '''Return sha256 digest of string'''
     return hashlib.sha256(string.encode()).hexdigest()
 
-            {
-                "id": digest(MCC_TITLE),
-                "tags": ["video", "educational"],
-                "releaseDate": "2011-08-01",
-                "title": MCC_TITLE,
-                "seasons": [],
-                "genres": ["educational", "news"],
-                "thumbnail": THUMBNAIL,
-                "shortDescription": "Video collection of Millbrae city council meetings"
-            },
+def new_series(title):
+    return {
+        "id": digest(title),
+        "tags": ["video", "educational", title],
+        "releaseDate": "2016-01-01",
+        "title": title,
+        "seasons": [],
+        "genres": ["educational", "news"],
+        "thumbnail": THUMBNAIL,
+        "shortDescription": "Short description of " + title,
+        "longDescription": "Long description for " + title
+    }
 
 def main():
     '''Main function'''
 
-    json_dict = {
+    feed = {
         "providerName": "Millbrae Community Television",
         "lastUpdated": datetime.datetime.isoformat(datetime.datetime.now()),
         "language": "en",
-        "movies": [],
-        "shortFormVideos": [],
-        "tvSpecials": [],
         "series": [],
-        "categories": [],
-        "playlists": []
+        # "movies": [],
+        # "shortFormVideos": [],
+        # "tvSpecials": [],
+        # "categories": [],
+        # "playlists": []
     }
 
     aws_s3 = boto3.resource('s3')
     rokufiles = aws_s3.Bucket('rokufiles')
 
-    type_pat = r'(?P<type>\w+)'
-    name_pat = r'(?P<name>\w+)'
-    season_pat = r'(?P<season>\d+)'
-    filename_pat = r'(?P<filename>[^\.]+)\.(?P<ext>\w+)'
-
-    object_pattern = type_pat + '/' + name_pat + '/' + season_pat + '/' + filename_pat
+    object_pattern = TYPE_PAT + '/' + NAME_PAT + '/'
 
     for item in rokufiles.objects.all():
-        print "processing", item.key
         match = re.search(object_pattern, item.key)
-        if match:
-            print "Matched groups:", match.groups()
-            if not has_season(json_dict, match.group('season')):
-                print "Creating new season:", match.group('season')
-                current_season = new_season(match.group('season'))
-                json_dict["series"][0]["seasons"].append(current_season)
+        if not match:
+            print "Failed to match:", item.key
+            continue
 
-            print "Adding episode", match.group('filename'), "to season", match.group('season')
-            current_episode = new_episode(match.group('season'), match.group('filename'), match.group('type'))
-            add_episode_to_season(json_dict, match.group('season'), current_episode)
-        else:
-            print "Match failure:", item.key
+        print "Matched groups:", match.groups()
+
+        ctype = match.group('type')
+        name = match.group('name')
+
+        if not has_content_type(feed, ctype, name):
+            print "Creating new", ctype, name
+            insert_new_content(feed, ctype, name)
+
+        if ctype == 'series':
+            object_pattern = TYPE_PAT + '/' + NAME_PAT + '/' + SEASON_PAT + '/' + FILENAME_PAT
+            match = re.search(object_pattern, item.key)
+
+            if not match:
+                print "Failed to match:", item.key
+                continue
+
+            season = match.group('season')
+            filename = match.group('filename')
+            extension = match.group('ext')
+
+            if not has_season(feed, season):
+                print "Creating new season:", season
+                new_season = create_season(season)
+                feed["series"][0]["seasons"].append(new_season)
+
+            print "Adding", name,  "episode", filename, "to season", season
+
+            new_episode = create_episode(
+                    ctype,
+                    name,
+                    season,
+                    filename,
+                    extension,
+                    get_last_modified_datetime(item),
+                    get_duration(item),
+                    get_thumbnail(item),
+                    "Short episode description of " + filename,
+                    "Long episode description of " + filename,
+                    get_last_modified_date(item))
+
+            add_episode_to_season(feed, season, new_episode)
 
     with open("mctv-roku.json", "w") as handle:
-        handle.write(json.dumps(json_dict, indent=4))
+        handle.write(json.dumps(feed, indent=4))
 
 
 if __name__ == "__main__":
