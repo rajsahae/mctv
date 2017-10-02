@@ -15,9 +15,7 @@ import boto3
 
 CDN_URI = "http://d3mgvwaiuadt8i.cloudfront.net"
 MCC_TITLE = "Millbrae City Council Meetings"
-THUMBNAIL = "https://upload.wikimedia.org/" + \
-        "wikipedia/commons/thumb/f/f8/" + \
-        "Aspect-ratio-16x9.svg/2000px-Aspect-ratio-16x9.svg.png"
+THUMBNAIL = "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png"
 
 TYPE_PAT = r'^(?P<type>\w+)'
 NAME_PAT = r'(?P<name>[\w\s]+)'
