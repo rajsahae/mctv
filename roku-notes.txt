@@ -5,7 +5,7 @@ Next steps:
   - Parse filename for episode dates (2016 and 2017 are different)
   - Create some more categories (MCC, Planning Commision, Kids?, Sports, etc.)(started)
   - Playlists? (for later)
-  - create a form to upload and create all necessary tags
+  - create a form to upload and create all necessary tags (made a command line tool instead)
 
 
 Must-have tags:
