@@ -1,12 +1,14 @@
-Next steps:
+TODO items done:
   - Change s3 bucket folder structure to match roku json structure (movies, series, specials, short videos) (done)
   - Change generation script to use new structure (done)
   - Come up with list of tags that each video needs (especially for episodes of Millbrae City Council meetings)(done)
-  - Parse filename for episode dates (2016 and 2017 are different)
+  - create a form to upload and create all necessary tags (done, made a command line tool instead)
+
+TODO items not done:
+  - Parse filename for episode dates (2016 and 2017 are different, need to standardize)
   - Create some more categories (MCC, Planning Commision, Kids?, Sports, etc.)(started)
   - Playlists? (for later)
-  - create a form to upload and create all necessary tags (made a command line tool instead)
-
+  - Modify generation script use uploaded tags instead of hardcoded values (need to add tags to all current videos)
 
 Must-have tags:
   - duration (in seconds)
