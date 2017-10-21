@@ -73,7 +73,7 @@ def upload_content(video, destination, duration, shortdesc, thumbnail):
                     'Value': duration
                 },
                 {
-                    'Key': 'shortDesc',
+                    'Key': 'shortDescription',
                     'Value': shortdesc
                 },
                 {

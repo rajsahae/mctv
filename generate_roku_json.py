@@ -15,7 +15,10 @@ import boto3
 
 CDN_URI = "http://d3mgvwaiuadt8i.cloudfront.net"
 MCC_TITLE = "Millbrae City Council Meetings"
-THUMBNAIL = "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png"
+DEFAULT_THUMBNAIL = "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png"
+DEFAULT_DURATION = 10800 # 3 hours in seconds
+DEFAULT_SHORT_DESCRIPTION = "A regular meeting of the Millbrae City Council"
+DEFAULT_LONG_DESCRIPTION = "A regular meeting of the Millbrae City Council"
 
 TYPE_PAT = r'^(?P<type>\w+)'
 NAME_PAT = r'(?P<name>[\w\s]+)'
@@ -24,7 +27,7 @@ FILENAME_PAT = r'(?P<filename>[^\.]+)\.(?P<ext>\w+)$'
 
 def get_thumbnail(item):
     # hardcoded for now
-    return THUMBNAIL
+    return DEFAULT_THUMBNAIL
 
 def get_last_modified_date(item):
     return item.last_modified.isoformat()[:10]
@@ -32,14 +35,32 @@ def get_last_modified_date(item):
 def get_last_modified_datetime(item):
     return item.last_modified.isoformat()
 
-def get_duration(item):
-    # hardcoded for now
-    return 10800
+def get_duration(client, item):
+    value = _get_tag(client, item, 'duration')
+    if value is not None:
+        print "Tagging duration", value
+        return int(value)
+    else:
+        return DEFAULT_DURATION
 
-def add_episode_to_season(feed, year, episode):
+def get_short_description(client, item):
+    return DEFAULT_SHORT_DESCRIPTION
+
+def get_long_description(client, item):
+    return DEFAULT_LONG_DESCRIPTION
+
+def _get_tag(client, item, key):
+    tagset = client.get_object_tagging(Bucket='rokufiles', Key=item.key)
+    # print(repr(tagset['TagSet']))
+    for tag in tagset['TagSet']:
+        if tag['Key'] == key:
+            return tag['Value']
+    return None
+
+def add_episode_to_content(content, year, episode):
     '''Add episode to the specified dict'''
     season = next(
-        season for season in feed["series"][0]["seasons"] if season["seasonNumber"] == int(year)
+        season for season in content["seasons"] if season["seasonNumber"] == int(year)
     )
     if not season['episodes']:
         episode['episodeNumber'] = 1
@@ -76,17 +97,21 @@ def create_season(year):
     return {"seasonNumber": int(year), "episodes": []}
 
 def has_content_type(feed, ctype, title):
-    '''Return True if dict contains content type with specified name'''
-    return any(map(lambda x: x['title'] == title, feed[ctype]))
+    '''Return content if dict contains content type with specified name'''
+    try:
+        return (content for content in feed[ctype] if content['title'] == title).next()
+    except StopIteration:
+        return None
 
-def has_season(feed, year):
+def has_season(content, year):
     '''Return True if dict contains season for specified year'''
-    return any(map(lambda x: x['seasonNumber'] == int(year), feed['series'][0]['seasons']))
+    return any(map(lambda x: x['seasonNumber'] == int(year), content['seasons']))
 
 def insert_new_content(feed, ctype, title):
     if ctype == "series":
         content = new_series(title)
     feed[ctype].append(content)
+    return content
 
 def digest(string):
     '''Return sha256 digest of string'''
@@ -100,7 +125,7 @@ def new_series(title):
         "title": title,
         "seasons": [],
         "genres": ["educational", "news"],
-        "thumbnail": THUMBNAIL,
+        "thumbnail": DEFAULT_THUMBNAIL,
         "shortDescription": "Short description of " + title,
         "longDescription": "Long description for " + title
     }
@@ -122,6 +147,7 @@ def main():
 
     aws_s3 = boto3.resource('s3')
     rokufiles = aws_s3.Bucket('rokufiles')
+    client = boto3.client('s3')
 
     object_pattern = TYPE_PAT + '/' + NAME_PAT + '/'
 
@@ -136,9 +162,10 @@ def main():
         ctype = match.group('type')
         name = match.group('name')
 
-        if not has_content_type(feed, ctype, name):
+        content = has_content_type(feed, ctype, name)
+        if content is None:
             print "Creating new", ctype, name
-            insert_new_content(feed, ctype, name)
+            content = insert_new_content(feed, ctype, name)
 
         if ctype == 'series':
             object_pattern = TYPE_PAT + '/' + NAME_PAT + '/' + SEASON_PAT + '/' + FILENAME_PAT
@@ -152,10 +179,10 @@ def main():
             filename = match.group('filename')
             extension = match.group('ext')
 
-            if not has_season(feed, season):
+            if not has_season(content, season):
                 print "Creating new season:", season
                 new_season = create_season(season)
-                feed["series"][0]["seasons"].append(new_season)
+                content["seasons"].append(new_season)
 
             print "Adding", name,  "episode", filename, "to season", season
 
@@ -166,13 +193,13 @@ def main():
                     filename,
                     extension,
                     get_last_modified_datetime(item),
-                    get_duration(item),
+                    get_duration(client, item),
                     get_thumbnail(item),
-                    "Short episode description of " + filename,
-                    "Long episode description of " + filename,
+                    get_short_description(client, item),
+                    get_long_description(client, item),
                     get_last_modified_date(item))
 
-            add_episode_to_season(feed, season, new_episode)
+            add_episode_to_content(content, season, new_episode)
 
     with open("mctv-roku.json", "w") as handle:
         handle.write(json.dumps(feed, indent=4))
