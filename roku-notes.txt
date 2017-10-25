@@ -3,12 +3,12 @@ TODO items done:
   - Change generation script to use new structure (done)
   - Come up with list of tags that each video needs (especially for episodes of Millbrae City Council meetings)(done)
   - create a form to upload and create all necessary tags (done, made a command line tool instead)
+  - Modify generation script use uploaded tags instead of hardcoded values (need to add tags to all current videos)(script component done)
+  - Create some more categories (MCC, Planning Commision, Kids?, Sports, etc.)(done)
 
 TODO items not done:
   - Parse filename for episode dates (2016 and 2017 are different, need to standardize)
-  - Create some more categories (MCC, Planning Commision, Kids?, Sports, etc.)(started)
   - Playlists? (for later)
-  - Modify generation script use uploaded tags instead of hardcoded values (need to add tags to all current videos)
 
 Must-have tags:
   - duration (in seconds)
