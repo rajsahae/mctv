@@ -14,7 +14,6 @@ import urllib
 import boto3
 
 CDN_URI = "http://d3mgvwaiuadt8i.cloudfront.net"
-MCC_TITLE = "Millbrae City Council Meetings"
 DEFAULT_THUMBNAIL = "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png"
 DEFAULT_DURATION = 10800 # 3 hours in seconds
 DEFAULT_SHORT_DESCRIPTION = "A regular meeting of the Millbrae City Council"
@@ -24,6 +23,44 @@ TYPE_PAT = r'^(?P<type>\w+)'
 NAME_PAT = r'(?P<name>[\w\s]+)'
 SEASON_PAT = r'(?P<season>\d+)'
 FILENAME_PAT = r'(?P<filename>[^\.]+)\.(?P<ext>\w+)$'
+TITLE_PAT = r'(?P<prefix>[^\d]+)(?P<date>\d{6})$'
+
+TITLES = { 
+    "MCC" : "Millbrae City Council Meeting",
+    "MCC_YouthGov_" : "Millbrae Youth and Government Meeting"
+}
+
+def get_release_date(filename):
+    match = re.search(TITLE_PAT, filename)
+    if not match:
+        return '2017-01-01'
+
+    datestring = match.group('date')
+    year = int('20' + datestring[0:2])
+    month = int(datestring[2:4])
+    day = int(datestring[4:6])
+
+    return datetime.date(year, month, day).isoformat()[:10]
+
+
+def get_title(filename):
+    match = re.search(TITLE_PAT, filename)
+    if not match:
+        return filename
+
+    prefix = match.group('prefix')
+    if prefix in TITLES:
+        prefix = TITLES[prefix]
+
+    datestring = match.group('date')
+    year = int('20' + datestring[0:2])
+    month = int(datestring[2:4])
+    day = int(datestring[4:6])
+
+    suffix = datetime.date(year, month, day).strftime('%b %d, %Y')
+
+    return suffix
+
 
 def get_thumbnail(item):
     # hardcoded for now
@@ -44,9 +81,24 @@ def get_duration(client, item):
         return DEFAULT_DURATION
 
 def get_short_description(client, item):
-    return DEFAULT_SHORT_DESCRIPTION
+    value = _get_tag(client, item, 'shortDescription')
+    if value is not None:
+        print "Tagging short description", value
+        return value
+    else:
+        return DEFAULT_SHORT_DESCRIPTION
 
 def get_long_description(client, item):
+    value = _get_tag(client, item, 'longDescription')
+    if value is not None:
+        print "Tagging long description", value
+        return value
+
+    value = get_short_description(client, item)
+    if value is not None:
+        print "Tagging long description", value
+        return value
+
     return DEFAULT_LONG_DESCRIPTION
 
 def _get_tag(client, item, key):
@@ -73,7 +125,7 @@ def create_episode(ctype, title, season, basename, vidtype, datetimeAdded, durat
     filename = basename + '.' + vidtype
     return {
         "id": digest(filename),
-        "title": basename,
+        "title": get_title(basename),
         "content": {
             "dateAdded": datetimeAdded,
             "videos": [
@@ -121,7 +173,7 @@ def new_series(title):
     return {
         "id": digest(title),
         "tags": ["video", "educational", title],
-        "releaseDate": "2016-01-01",
+        "releaseDate": "2017-01-01",
         "title": title,
         "seasons": [],
         "genres": ["educational", "news"],
@@ -197,7 +249,7 @@ def main():
                     get_thumbnail(item),
                     get_short_description(client, item),
                     get_long_description(client, item),
-                    get_last_modified_date(item))
+                    get_release_date(filename))
 
             add_episode_to_content(content, season, new_episode)
 
