@@ -14,10 +14,7 @@ import urllib
 import boto3
 
 CDN_URI = "http://d3mgvwaiuadt8i.cloudfront.net"
-DEFAULT_THUMBNAIL = "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png"
 DEFAULT_DURATION = 10800 # 3 hours in seconds
-DEFAULT_SHORT_DESCRIPTION = "A regular meeting of the Millbrae City Council"
-DEFAULT_LONG_DESCRIPTION = "A regular meeting of the Millbrae City Council"
 
 TYPE_PAT = r'^(?P<type>\w+)'
 NAME_PAT = r'(?P<name>[\w\s]+)'
@@ -26,8 +23,24 @@ FILENAME_PAT = r'(?P<filename>[^\.]+)\.(?P<ext>\w+)$'
 TITLE_PAT = r'(?P<prefix>[^\d]+)(?P<date>\d{6})$'
 
 TITLES = { 
+    "default" : "Millbrae City Council Meeting",
     "MCC" : "Millbrae City Council Meeting",
+    "MPC" : "Millbrae Planning Commission Meeting",
     "MCC_YouthGov_" : "Millbrae Youth and Government Meeting"
+}
+
+EPISODE_THUMBNAILS = {
+    "default" : "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png",
+    "MCC" : "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png",
+    "MPC" : "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+Planning+Commission.png",
+    "MCC_YouthGov_" : "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+Special+Events+and+Meetings.jpg",
+}
+
+SERIES_THUMBNAILS = {
+    "default" : "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png",
+    "Millbrae City Council Meetings" : "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+City+Council.png",
+    "Millbrae Planning Commission Meetings" : "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+Planning+Commission.png",
+    "Millbrae Special Meetings" : "https://s3-us-west-1.amazonaws.com/rokufiles/Roku+Special+Events+and+Meetings.jpg",
 }
 
 def get_release_date(filename):
@@ -61,10 +74,22 @@ def get_title(filename):
 
     return suffix
 
+def get_series_thumbnail(title):
+    if title in SERIES_THUMBNAILS:
+        return SERIES_THUMBNAILS[title]
 
-def get_thumbnail(item):
-    # hardcoded for now
-    return DEFAULT_THUMBNAIL
+    return SERIES_THUMBNAILS["default"]
+
+def get_episode_thumbnail(filename):
+    match = re.search(TITLE_PAT, filename)
+    if not match:
+        return EPISODE_THUMBNAILS["default"]
+
+    prefix = match.group('prefix')
+    if prefix in EPISODE_THUMBNAILS:
+        return EPISODE_THUMBNAILS[prefix]
+
+    return EPISODE_THUMBNAILS["default"]
 
 def get_last_modified_date(item):
     return item.last_modified.isoformat()[:10]
@@ -86,7 +111,7 @@ def get_short_description(client, item):
         print "Tagging short description", value
         return value
     else:
-        return DEFAULT_SHORT_DESCRIPTION
+        return None
 
 def get_long_description(client, item):
     value = _get_tag(client, item, 'longDescription')
@@ -99,7 +124,7 @@ def get_long_description(client, item):
         print "Tagging long description", value
         return value
 
-    return DEFAULT_LONG_DESCRIPTION
+    return None
 
 def _get_tag(client, item, key):
     tagset = client.get_object_tagging(Bucket='rokufiles', Key=item.key)
@@ -123,9 +148,11 @@ def add_episode_to_content(content, year, episode):
 def create_episode(ctype, title, season, basename, vidtype, datetimeAdded, duration, thumbnail, shortDesc, longDesc, dateAdded):
     '''Create and return a new series episode'''
     filename = basename + '.' + vidtype
+    title = get_title(basename)
+
     return {
         "id": digest(filename),
-        "title": get_title(basename),
+        "title": title,
         "content": {
             "dateAdded": datetimeAdded,
             "videos": [
@@ -139,8 +166,8 @@ def create_episode(ctype, title, season, basename, vidtype, datetimeAdded, durat
         },
         "thumbnail": thumbnail,
         "episodeNumber": 1,
-        "shortDescription": shortDesc,
-        "longDescription": longDesc,
+        "shortDescription": shortDesc or title,
+        "longDescription": longDesc or title,
         "releaseDate": dateAdded
     }
 
@@ -177,9 +204,9 @@ def new_series(title):
         "title": title,
         "seasons": [],
         "genres": ["educational", "news"],
-        "thumbnail": DEFAULT_THUMBNAIL,
-        "shortDescription": "Short description of " + title,
-        "longDescription": "Long description for " + title
+        "thumbnail": get_series_thumbnail(title),
+        "shortDescription": title,
+        "longDescription": title
     }
 
 def main():
@@ -246,7 +273,7 @@ def main():
                     extension,
                     get_last_modified_datetime(item),
                     get_duration(client, item),
-                    get_thumbnail(item),
+                    get_episode_thumbnail(filename),
                     get_short_description(client, item),
                     get_long_description(client, item),
                     get_release_date(filename))
