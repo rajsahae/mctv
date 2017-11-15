@@ -148,11 +148,11 @@ def add_episode_to_content(content, year, episode):
 def create_episode(ctype, title, season, basename, vidtype, datetimeAdded, duration, thumbnail, shortDesc, longDesc, dateAdded):
     '''Create and return a new series episode'''
     filename = basename + '.' + vidtype
-    title = get_title(basename)
+    short_title = get_title(basename)
 
     return {
         "id": digest(filename),
-        "title": title,
+        "title": short_title,
         "content": {
             "dateAdded": datetimeAdded,
             "videos": [
@@ -166,8 +166,8 @@ def create_episode(ctype, title, season, basename, vidtype, datetimeAdded, durat
         },
         "thumbnail": thumbnail,
         "episodeNumber": 1,
-        "shortDescription": shortDesc or title,
-        "longDescription": longDesc or title,
+        "shortDescription": shortDesc or short_title,
+        "longDescription": longDesc or short_title,
         "releaseDate": dateAdded
     }
 
